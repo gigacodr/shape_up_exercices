@@ -1,0 +1,2449 @@
+Repository: D:\Compressed\shape_up_exercise_start\shape_up_exercises
+Skip Binary Files: True
+Max File Size: 50000000 bytes
+
+Directory: cardio
+Directory: diet
+Directory: images
+Directory: m3
+Directory: media
+Directory: strength
+Directory: stress
+Directory: styles
+Directory: text
+File: .gitignore
+----- START OF FILE CONTENT -----
+.history/
+history.py
+----- END OF FILE CONTENT -----
+
+File: history.py
+----- START OF FILE CONTENT -----
+# File Hash: 1402295961ded1e26f8deca5b024b459c8a3cb79f9966f18a8510fe17642fd60
+#!/usr/bin/env python3
+"""
+repo_to_text.py
+
+A command-line tool that converts the contents of a Git repository
+into a textual format, preserving structure and file contents.
+
+Usage:
+    python repo_to_text.py --repo <path_to_repo> [--output <output_file>] [--max-size <bytes>] [--skip-binary]
+
+Arguments:
+    --repo <path>         Path to the local Git repository.
+    --output <file>       Optional path to output file (prints to stdout if not specified).
+    --max-size <bytes>    Maximum file size in bytes to include in text output (default: 1 MB).
+    --skip-binary         If specified, the script will skip binary files entirely.
+    -h, --help            Show this help message.
+
+Example:
+    python repo_to_text.py --repo /path/to/my-repo --output repo_dump.txt
+
+Notes:
+    1. By default, the .git directory is excluded.
+    2. The script will attempt a simple binary check if --skip-binary is provided.
+    3. --max-size can be used to limit the dumping of extremely large files.
+       Files above this threshold will be noted, but their contents will not be included.
+"""
+
+import os
+import sys
+
+DEFAULT_MAX_SIZE = 1_000_000  # 1 MB by default
+
+def parse_args(args):
+    """
+    Parses the command-line arguments.
+    """
+    repo_path = None
+    output_path = None
+    max_size = DEFAULT_MAX_SIZE
+    skip_binary = False
+
+    if '--help' in args or '-h' in args:
+        print(__doc__)
+        sys.exit(0)
+
+    # Simple argument parsing
+    for i, arg in enumerate(args):
+        if arg == '--repo' and i + 1 < len(args):
+            repo_path = args[i+1]
+        elif arg == '--output' and i + 1 < len(args):
+            output_path = args[i+1]
+        elif arg == '--max-size' and i + 1 < len(args):
+            try:
+                max_size = int(args[i+1])
+            except ValueError:
+                print(f"Invalid integer for --max-size: {args[i+1]}")
+                sys.exit(1)
+        elif arg == '--skip-binary':
+            skip_binary = True
+
+    if not repo_path:
+        print("Error: --repo <path_to_repo> is required.\n")
+        print(__doc__)
+        sys.exit(1)
+
+    return repo_path, output_path, max_size, skip_binary
+
+def is_binary_file(filepath, num_bytes=1024):
+    """
+    Attempt to determine if a file is binary by reading up to num_bytes
+    and checking for non-text characters.
+    """
+    try:
+        with open(filepath, 'rb') as f:
+            chunk = f.read(num_bytes)
+        if b'\0' in chunk:
+            return True
+        return False
+    except Exception:
+        # If there's an error reading, treat as binary to skip
+        return True
+
+def walk_repository(repo_path, skip_binary=False, max_size=DEFAULT_MAX_SIZE):
+    """
+    Generator that walks through the repository, yielding tuples of:
+        (is_directory, relative_path, content or None)
+    
+    - If is_directory is True, 'content' will be None.
+    - If is_directory is False, 'content' will be the file content or a note if skipped.
+    """
+    for root, dirs, files in os.walk(repo_path):
+        # Skip .git directory
+        if '.git' in dirs:
+            dirs.remove('.git')
+
+        # For each directory
+        for directory in dirs:
+            dir_rel_path = os.path.relpath(os.path.join(root, directory), repo_path)
+            yield (True, dir_rel_path, None)
+
+        # For each file
+        for file in files:
+            file_path = os.path.join(root, file)
+            rel_path = os.path.relpath(file_path, repo_path)
+
+            # Get file size
+            file_size = os.path.getsize(file_path)
+
+            if skip_binary and is_binary_file(file_path):
+                content = f"[Skipped binary file: {rel_path}]"
+                yield (False, rel_path, content)
+            else:
+                if file_size > max_size:
+                    content = f"[File exceeds {max_size} bytes, skipping content: {rel_path}]"
+                    yield (False, rel_path, content)
+                else:
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                            content = f.read()
+                    except Exception as e:
+                        content = f"[Error reading file: {rel_path}, Error: {str(e)}]"
+                    yield (False, rel_path, content)
+
+def format_output(repo_path, skip_binary, max_size):
+    """
+    Convert the repository content into a text representation.
+    """
+    output_lines = []
+    output_lines.append(f"Repository: {repo_path}")
+    output_lines.append(f"Skip Binary Files: {skip_binary}")
+    output_lines.append(f"Max File Size: {max_size} bytes\n")
+
+    for is_dir, rel_path, content in walk_repository(repo_path, skip_binary, max_size):
+        if is_dir:
+            output_lines.append(f"Directory: {rel_path}")
+        else:
+            output_lines.append(f"File: {rel_path}")
+            output_lines.append("----- START OF FILE CONTENT -----")
+            output_lines.append(content if content else "")
+            output_lines.append("----- END OF FILE CONTENT -----\n")
+
+    return "\n".join(output_lines)
+
+def main():
+    repo_path, output_path, max_size, skip_binary = parse_args(sys.argv[1:])
+
+    # Validate repo path
+    if not os.path.isdir(repo_path):
+        print(f"Error: Repository path '{repo_path}' is not a directory or does not exist.")
+        sys.exit(1)
+
+    result_text = format_output(repo_path, skip_binary, max_size)
+
+    if output_path:
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(result_text)
+            print(f"Repository text dump written to '{output_path}'.")
+        except Exception as e:
+            print(f"Error writing to output file '{output_path}': {str(e)}")
+            sys.exit(1)
+    else:
+        print(result_text)
+
+if __name__ == "__main__":
+    main()
+
+# make sure before you run, .history folder is deleted or empty because it will literally include everything inside. too lazy rn to make a ignore logic
+
+# python3 history.py --repo D:\Compressed\shape_up_exercise_start\shape_up_exercises --output repo_dump.txt --max-size 50000000 --skip-binary
+----- END OF FILE CONTENT -----
+
+File: index.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shape Up Home Page</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+
+  <div class="wrapper">
+
+    <header>
+      <img src="images/shape_up_logo.png" alt="Shape Up logo" />
+      <h1>Shape Up!</h1>
+      <h2 class="subhead">Find the best fit for you</h2>
+    </header>
+
+    <nav>
+      <ul class="main-menu">
+
+        <li class="current"><a href="index.html">Home</a></li>
+        <li><a href="strength/strength.html">Strength Training</a></li>
+        <li><a href="cardio/cardio.html">Cardio Exercises</a></li>
+        <li>
+          <a href="stress/stress.html">Stress Relief</a>
+
+          <ul class="sub-menu">
+            <li><a href="stress/stress.html">What is Stress?</a></li>
+            <li><a href="stress/tips.html">5 Helpful Tips</a></li>
+            <li><a href="stress/meditate.html">Meditation</a></li>
+            <li><a href="stress/vipassana.html">Vipassana</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="diet/diet.html">Healthy Diets</a>
+
+          <ul class="sub-menu">
+            <li><a href="diet/diet.html">Why a Healthy Diet?</a></li>
+            <li><a href="diet/meals.html">Plan Your Meals</a></li>
+            <li><a href="diet/calories.html">Count Your Calories</a></li>
+            <li><a href="diet/bmi.html">Calculate Your BMI</a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+
+    <main>
+      <section>
+        <h2>Get ready to Shape Up!</h2>
+        <p>
+          How many times have you started a new workout routine or diet? 
+          And how many times has it failed to give you the results you want? 
+          Now, with the help of this site, you can learn about the exercises 
+          and diet that work best for you. We offer personalized programs as well 
+          as access to several health and dieting tools. 
+          So don't wait! Get started looking and feeling better today.
+        </p>
+        <p>
+          As fitness expert Amanda Russell said:
+        </p>
+        <blockquote>
+          Fitness is about so much more than exercise. 
+          It's a catalyst for positive change, and it affects every aspect of your life.
+        </blockquote>
+
+        <h2>What we offer</h2>
+
+        <h3 class="underline">Build strong muscles</h3>
+        <p>
+          Tired of being tired? Strength training can help you manage or lose weight 
+          and increase your metabolism to help you burn more calories. It can also 
+          increase bone density and reduce the risk of osteoporosis.
+        </p>
+
+        <h3 class="underline">Get your heart rate up</h3>
+        <p>
+          Want to lose weight? Cardiovascular exercise burns calories and improves overall health.
+          It can reduce belly fat, promote brain growth, prevent stress, and help you focus.
+        </p>
+
+        <h3 class="underline">Relax</h3>
+        <p>
+          Stressed out? Stress can weaken the immune system and cause high blood pressure, 
+          fatigue, depression, anxiety, and even heart disease. Learn ways to manage and reduce stress.
+        </p>
+
+        <h3 class="underline">Eat what's right for you</h3>
+        <p>
+          Are you really what you eat? Lose weight, gain weight, or just feel great! Maintaining
+          a healthy diet is probably the most important thing you can do to promote overall health.
+        </p>
+      </section>
+
+      <aside>
+        <h2>Additional resources</h2>
+        <ul class="blue-links">
+          <li>
+            <a href="https://www.cdc.gov/physical-activity-basics/benefits/index.html">
+              Physical activity and health
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching">
+              Stretching exercises
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise">
+              Strength training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart">
+              Cardiovascular training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.self.com/gallery/power-yoga-workout">
+              Yoga workout
+            </a>
+          </li>
+        </ul>
+      </aside>
+    </main>
+
+    <footer>
+      <p>© Shape Up!</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>
+
+----- END OF FILE CONTENT -----
+
+File: index_3_column.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shape Up Home Page (3 Column)</title>
+  <link rel="stylesheet" href="styles/main_3_column.css" />
+</head>
+<body>
+
+  <div class="wrapper">
+
+    <header>
+      <img src="images/shape_up_logo.png" alt="Shape Up logo" />
+      <h1>Shape Up!</h1>
+      <h2 class="subhead">Find the best fit for you</h2>
+    </header>
+
+    <main>
+      <aside>
+        <h2>Additional resources</h2>
+        <ul class="blue-links">
+          <li>
+            <a href="https://www.cdc.gov/physical-activity-basics/benefits/index.html">
+              Physical activity and health
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching">
+              Stretching exercises
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise">
+              Strength training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart">
+              Cardiovascular training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.self.com/gallery/power-yoga-workout">
+              Yoga workout
+            </a>
+          </li>
+        </ul>
+      </aside>
+
+      <section>
+        <h2>Get ready to Shape Up!</h2>
+        <p>
+          How many times have you started a new workout routine or diet? 
+          And how many times has it failed to give you the results you want? 
+          Now, with the help of this site, you can learn about the exercises 
+          and diet that work best for you. We offer personalized programs as well 
+          as access to several health and dieting tools. 
+          So don't wait! Get started looking and feeling better today.
+        </p>
+        <p>
+          As fitness expert Amanda Russell said:
+        </p>
+        <blockquote>
+          Fitness is about so much more than exercise. 
+          It's a catalyst for positive change, and it affects every aspect of your life.
+        </blockquote>
+
+        <h2>What we offer</h2>
+
+        <h3 class="underline">Build strong muscles</h3>
+        <p>
+          Tired of being tired? Strength training can help you manage or lose weight 
+          and increase your metabolism to help you burn more calories. It can also 
+          increase bone density and reduce the risk of osteoporosis.
+        </p>
+
+        <h3 class="underline">Get your heart rate up</h3>
+        <p>
+          Want to lose weight? Cardiovascular exercise burns calories and improves overall health.
+          It can reduce belly fat, promote brain growth, prevent stress, and help you focus.
+        </p>
+
+        <h3 class="underline">Relax</h3>
+        <p>
+          Stressed out? Stress can weaken the immune system and cause high blood pressure, 
+          fatigue, depression, anxiety, and even heart disease. Learn ways to manage and reduce stress.
+        </p>
+
+        <h3 class="underline">Eat what's right for you</h3>
+        <p>
+          Are you really what you eat? Lose weight, gain weight, or just feel great! Maintaining
+          a healthy diet is probably the most important thing you can do to promote overall health.
+        </p>
+      </section>
+
+      <aside>
+        <h2>How to prepare to Shape Up!</h2>
+        <p>
+          <strong>Get a check up</strong><br>
+          If you have any health issues or take any medications, be sure to consult 
+          with your healthcare provider before beginning a new exercise or diet regimen.
+        </p>
+        <p>
+          <strong>Dress for Success</strong><br>
+          Workout clothes should be comfy. While exercising, you should be thinking about 
+          what you're doing, not what you're wearing. That includes good shoes, which are 
+          essential for running, jogging, or walking, and socks that absorb shock and sweat.
+        </p>
+        <p>
+          <strong>Equipment?</strong><br>
+          You don't need to buy a lot of fancy equipment to get in shape. But you might 
+          want to invest in a yoga mat, a large exercise ball, or some weights, depending 
+          on your Shape Up! plan.
+        </p>
+        <p>
+          <strong>Resist Temptation</strong><br>
+          It's hard to eat right when everyone else is buying lunch at a fast food 
+          restaurant. Invest in some good food containers and bring your healthy lunch 
+          and snacks. Your body and your wallet will thank you.
+        </p>
+      </aside>
+    </main>
+
+    <footer>
+      <p>© Shape Up!</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>
+
+----- END OF FILE CONTENT -----
+
+File: cardio\cardio.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Cardio Exercises</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Cardio Exercises</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: diet\bmi.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | BMI</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Body Mass Index</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: diet\calories.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Calorie Counter</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Calorie Counter</h1>
+		<h2>Under Construction</h2>	      
+    </main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: diet\diet.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Healthy Diet</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Healthy Diet</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: diet\meals.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Meal Plan</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Meal Plan</h1>
+		<h2>Under Construction</h2>	    
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: diet\meal_request.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Shape Up! | Meals Request</title>
+</head>
+<body>
+	<main>
+	    <h1>Your request has been submitted!</h1>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+Directory: images\food
+File: images\break.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\break.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\cardio-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\cardio-icon.png]
+----- END OF FILE CONTENT -----
+
+File: images\cyclist.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\cyclist.png]
+----- END OF FILE CONTENT -----
+
+File: images\exercise.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\exercise.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\favicon.ico
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\favicon.ico]
+----- END OF FILE CONTENT -----
+
+File: images\lotus-position.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\lotus-position.png]
+----- END OF FILE CONTENT -----
+
+File: images\meditate.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\meditate.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\run-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\run-icon.png]
+----- END OF FILE CONTENT -----
+
+File: images\shape_up_logo.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\shape_up_logo.png]
+----- END OF FILE CONTENT -----
+
+File: images\shape_up_logo.webp
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\shape_up_logo.webp]
+----- END OF FILE CONTENT -----
+
+File: images\smile.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\smile.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\strength-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\strength-icon.png]
+----- END OF FILE CONTENT -----
+
+File: images\stress.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\stress.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\stretch-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\stretch-icon.png]
+----- END OF FILE CONTENT -----
+
+File: images\support.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\support.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\vegetables.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\vegetables.png]
+----- END OF FILE CONTENT -----
+
+File: images\vipassana.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\vipassana.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\weightlifting.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\weightlifting.png]
+----- END OF FILE CONTENT -----
+
+File: images\yoga-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\yoga-icon.png]
+----- END OF FILE CONTENT -----
+
+File: images\food\breakfast_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\breakfast_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\breakfast_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\breakfast_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\desert_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\desert_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\desert_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\desert_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\dinner_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\dinner_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\dinner_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\dinner_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\healthy_food.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\healthy_food.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\lunch_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\lunch_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: images\food\lunch_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: images\food\lunch_good.jpg]
+----- END OF FILE CONTENT -----
+
+Directory: m3\cardio
+Directory: m3\diet
+Directory: m3\images
+Directory: m3\media
+Directory: m3\strength
+Directory: m3\stress
+Directory: m3\styles
+Directory: m3\text
+File: m3\index.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shape Up Home Page</title>
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+
+  <div class="wrapper">
+
+    <header>
+      <img src="images/shape_up_logo.png" alt="Shape Up logo" />
+      <h1>Shape Up!</h1>
+      <h2 class="subhead">Find the best fit for you</h2>
+    </header>
+
+    <main>
+      <section>
+        <h2>Get ready to Shape Up!</h2>
+        <p>
+          How many times have you started a new workout routine or diet? 
+          And how many times has it failed to give you the results you want? 
+          Now, with the help of this site, you can learn about the exercises 
+          and diet that work best for you. We offer personalized programs as well 
+          as access to several health and dieting tools. 
+          So don't wait! Get started looking and feeling better today.
+        </p>
+        <p>
+          As fitness expert Amanda Russell said:
+        </p>
+        <blockquote>
+          Fitness is about so much more than exercise. 
+          It's a catalyst for positive change, and it affects every aspect of your life.
+        </blockquote>
+
+        <h2>What we offer</h2>
+
+        <h3 class="underline">Build strong muscles</h3>
+        <p>
+          Tired of being tired? Strength training can help you manage or lose weight 
+          and increase your metabolism to help you burn more calories. It can also 
+          increase bone density and reduce the risk of osteoporosis.
+        </p>
+
+        <h3 class="underline">Get your heart rate up</h3>
+        <p>
+          Want to lose weight? Cardiovascular exercise burns calories and improves overall health.
+          It can reduce belly fat, promote brain growth, prevent stress, and help you focus.
+        </p>
+
+        <h3 class="underline">Relax</h3>
+        <p>
+          Stressed out? Stress can weaken the immune system and cause high blood pressure, 
+          fatigue, depression, anxiety, and even heart disease. Learn ways to manage and reduce stress.
+        </p>
+
+        <h3 class="underline">Eat what's right for you</h3>
+        <p>
+          Are you really what you eat? Lose weight, gain weight, or just feel great! Maintaining
+          a healthy diet is probably the most important thing you can do to promote overall health.
+        </p>
+
+        <aside>
+          <h2>Additional resources</h2>
+          <ul class="blue-links">
+            <li><a href="https://www.cdc.gov/physical-activity-basics/benefits/index.html">Physical activity and health</a></li>
+            <li><a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching">
+              Stretching exercises</a></li>
+            <li><a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise">
+              Strength training</a></li>
+            <li><a href="https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart">
+              Cardiovascular training</a></li>
+            <li><a href="https://www.self.com/gallery/power-yoga-workout">Yoga workout</a></li>
+          </ul>
+        </aside>
+      </section>
+    </main>
+
+    <footer>
+      <p>© Shape Up!</p>
+    </footer>
+
+  </div>
+
+</body>
+</html>
+
+----- END OF FILE CONTENT -----
+
+File: m3\cardio\cardio.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Cardio Exercises</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Cardio Exercises</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\diet\bmi.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | BMI</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Body Mass Index</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\diet\calories.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Calorie Counter</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Calorie Counter</h1>
+		<h2>Under Construction</h2>	      
+    </main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\diet\diet.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Healthy Diet</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Healthy Diet</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\diet\meals.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Meal Plan</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Meal Plan</h1>
+		<h2>Under Construction</h2>	    
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\diet\meal_request.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Shape Up! | Meals Request</title>
+</head>
+<body>
+	<main>
+	    <h1>Your request has been submitted!</h1>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+Directory: m3\images\food
+File: m3\images\break.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\break.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\cardio-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\cardio-icon.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\cyclist.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\cyclist.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\exercise.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\exercise.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\favicon.ico
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\favicon.ico]
+----- END OF FILE CONTENT -----
+
+File: m3\images\lotus-position.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\lotus-position.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\meditate.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\meditate.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\run-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\run-icon.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\shape_up_logo.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\shape_up_logo.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\shape_up_logo.webp
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\shape_up_logo.webp]
+----- END OF FILE CONTENT -----
+
+File: m3\images\smile.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\smile.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\strength-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\strength-icon.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\stress.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\stress.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\stretch-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\stretch-icon.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\support.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\support.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\vegetables.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\vegetables.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\vipassana.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\vipassana.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\weightlifting.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\weightlifting.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\yoga-icon.png
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\yoga-icon.png]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\breakfast_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\breakfast_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\breakfast_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\breakfast_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\desert_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\desert_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\desert_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\desert_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\dinner_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\dinner_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\dinner_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\dinner_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\healthy_food.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\healthy_food.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\lunch_bad.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\lunch_bad.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\images\food\lunch_good.jpg
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\images\food\lunch_good.jpg]
+----- END OF FILE CONTENT -----
+
+File: m3\media\ambient_grand_piano.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\media\ambient_grand_piano.mp3]
+----- END OF FILE CONTENT -----
+
+File: m3\media\body_and_soul.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\media\body_and_soul.mp3]
+----- END OF FILE CONTENT -----
+
+File: m3\media\meditation.mp4
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\media\meditation.mp4]
+----- END OF FILE CONTENT -----
+
+File: m3\media\time_inevitability.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\media\time_inevitability.mp3]
+----- END OF FILE CONTENT -----
+
+File: m3\media\waves_and_tears.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: m3\media\waves_and_tears.mp3]
+----- END OF FILE CONTENT -----
+
+File: m3\strength\strength.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Strength Training</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Strength Training</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\stress\meditate.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Meditation</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Meditation</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\stress\stress.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Stress</title>
+</head>
+
+<body>
+    <main>
+        <h1>Stress Relief</h1>
+        <h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\stress\tips.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Stress Relief Tips</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Stress relief tips</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\stress\vipassana.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Vipassana</title>
+</head>
+
+<body>
+    <main>
+        <h1>Vipassana</h1>
+        <h2>Under construction</h2>
+    </main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: m3\styles\main.css
+----- START OF FILE CONTENT -----
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #f0f0f0; 
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  color: #000;
+}
+
+.wrapper {
+  width: 900px;
+  margin: 30px auto; 
+  background-color: #fff;
+  border: 2px solid steelblue;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  padding: 20px;
+}
+
+header {
+  background: linear-gradient(white, lightsteelblue);
+  padding: 1em;
+  border-bottom: 2px solid steelblue;
+}
+
+header img {
+  float: left;
+  margin-right: 10px;
+  margin-top: 5px;
+}
+
+header::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+h1 {
+  color: steelblue;
+  font-size: 2em;
+  font-style: italic;
+  margin: 0; 
+}
+
+.subhead {
+  font-size: 1.4em;
+  font-weight: normal;
+  color: #000;
+  margin-top: 0.2em;
+  margin-bottom: 0.6em;
+}
+
+h2 {
+  color: #000;
+  font-size: 1.6em;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+h3 {
+  color: maroon;
+  font-size: 1.2em;
+  margin-top: 1em;
+  margin-bottom: 0.3em;
+  font-weight: bold;
+}
+
+p {
+  line-height: 1.5;
+  margin-bottom: 1em;
+}
+
+blockquote {
+  margin: 0 20px;
+  font-style: italic;
+}
+
+aside {
+  border: 2px solid steelblue;
+  border-radius: 8px;
+  padding: 1em;
+  margin: 1.5em 0; 
+  background-color: #fafafa; 
+}
+
+a:link,
+a:visited {
+  color: maroon;
+  text-decoration: underline;
+  font-weight: bold;
+}
+
+a:hover,
+a:focus {
+  color: steelblue;
+}
+
+.blue-links a:link,
+.blue-links a:visited {
+  color: steelblue;
+}
+.blue-links a:hover,
+.blue-links a:focus {
+  color: steelblue;
+  text-decoration: underline;
+}
+
+ul {
+  list-style-type: disc;
+  margin-left: 20px;
+  margin-bottom: 1em;
+}
+
+footer {
+  background-color: steelblue;
+  color: #fff;
+  text-align: center;
+  font-size: 0.9em;
+  padding: 1em;
+  margin-top: 20px;
+}
+
+.underline {
+  text-decoration: underline;
+}
+
+----- END OF FILE CONTENT -----
+
+File: m3\text\bmi.txt
+----- START OF FILE CONTENT -----
+What is a Body Mass Index?
+
+Body mass index (BMI) is a measure of a person's body fat based on his or her height and weight. It can be used to determine if you are underweight, normal, overweight, or obese.
+			
+Calculate your Body Mass Index
+        
+Use the form that follows to calculate your BMI:
+
+What do my results mean? Health authorities agree that:
+
+People with a BMI of less than 18.5 are underweight.
+A BMI of between 18.5 and 25 is ideal.
+People with a BMI between 25 and 30 are considered overweight.
+People with a BMI over 30 are considered obese.      
+----- END OF FILE CONTENT -----
+
+File: m3\text\calories.txt
+----- START OF FILE CONTENT -----
+Calorie Counter
+
+Category	Food	Serving size	Calories
+Beef	Frankfurter, Beef	1 each	184
+	Ground Beef	4 oz	264
+	T-Bone Steak	8 ounces	402
+
+Bread	Bagel, plain	1 bagel	360
+	Bread, sliced	1 slice	60 to 80
+	English Muffin	1	135
+
+Cereal	Cheerios	1 cup	110
+	Corn Flakes	1 cup	100
+	Oatmeal, quick	1 cup cooked	145
+
+Cheese	American	1 ounce	106
+	Swiss	1 ounce	100
+	Cheddar	1 ounce	114
+	Cottage Cheese, regular	1/2 cup	117
+
+Fruit	Apple	1 medium	80
+	Banana	1	105
+
+Vegetables	Corn, fresh	1 medium ear	88
+	Carrot, raw	1 medium	25
+	Celery	1 large stalk	9
+
+Miscellaneous	Milk, whole	1 cup	157
+	Eggs	1	70
+	Peanut butter	2 tablespoons	188
+	Pasta	1/2 cup dry	200
+	Rice	1 cup cooked	204
+	Canned tuna, in water	2 ounces	70
+	Baked potato	1 medium	130
+----- END OF FILE CONTENT -----
+
+File: m3\text\diet.txt
+----- START OF FILE CONTENT -----
+Why a healthy diet is important
+
+Although exercise can help you lose body fat and tone muscles, it's also important to have a healthy diet. In the short term, a poor diet can contribute to stress, tiredness, and the capacity to work. Over time, it may add to the risk of developing some illnesses and health problems such as obesity, tooth decay, high blood pressure, high cholesterol, heart disease, some cancers, depression, osteoporosis, and type-2 diabetes. You've probably heard the old saying, "you are what you eat." So, to be in shape, you need to eat right.
+
+What is a healthy diet?
+
+A healthy diet is more than eating a salad for lunch or buying fat-free yogurt. A healthy diet is a balanced diet that gives your body the nutrients it needs to function properly. And that means getting the majority of your daily calories from fresh fruits and vegetables, whole grains, legumes, nuts, and lean proteins.
+
+When should you start?
+
+Right now! No matter how old you are, how you've eaten in the past, whether you exercise daily or almost never, the benefits of a healthy diet begin today... if you start today!
+
+Where can you find healthy food?
+
+Healthy food is available almost everywhere. You just have to plan ahead. Almost all restaurants and grocery stores offer healthy options nowadays. And, although it may be more expensive than unhealthy food, the extra money you spend on buying healthy food will be repaid many times over from a healthy life.
+----- END OF FILE CONTENT -----
+
+File: m3\text\home.txt
+----- START OF FILE CONTENT -----
+Shape Up!
+
+Find the best fit for you
+
+Get ready to Shape Up!
+How many times have you started a new workout routine or diet? And how many times has it failed to give you the results you want? Now, with the help of this site, you can learn about the exercises and diet that work best for you. We offer personalized programs as well as access to several health and dieting tools. So don't wait! Get started looking and feeling better today.
+As fitness expert Amanda Russell said:
+Fitness is about so much more than exercise. It’s a catalyst for positive change, and it affects every aspect of your life.
+
+What we offer
+
+Build strong muscles
+Tired of being tired? Strength training can help you manage or lose weight and increase your metabolism to help you burn more calories. It can also increase bone density and reduce the risk of osteoporosis.
+
+Get your heart rate up
+Want to lose weight? Cardiovascular exercise burns calories and improves overall health. It can reduce belly fat, promote brain growth, prevent stress, and help you focus.
+
+Relax
+Stressed out? Stress can weaken the immune system and cause high blood pressure, fatigue, depression, anxiety, and even heart disease. Learn ways to manage and reduce stress.
+
+Eat what's right for you
+Are you really what you eat? Lose weight, gain weight, or just feel great! Maintaining a healthy diet is probably the most important thing you can do to promote overall health.
+
+Additional resources
+
+Physical activity and health
+https://www.cdc.gov/physical-activity-basics/benefits/index.html
+
+Stretching exercises
+https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching
+
+Strength training
+https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise
+
+Cardiovascular training
+https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart
+
+Yoga workout
+https://www.self.com/gallery/power-yoga-workout
+
+(c) Shape Up!
+----- END OF FILE CONTENT -----
+
+File: m3\text\meals.txt
+----- START OF FILE CONTENT -----
+Meal plan order form
+
+Fill out the form as completely as possible and we will email you a weekly meal plan, customized
+for you--your lifestyle, your goals, and your personal needs.
+
+Asterisks (*) indicate required entries.
+
+Tell us about yourself
+
+Full name
+Email
+    Gender
+    Select a gender
+    Male
+    Female
+    Non-Binary
+Height    Example: 5ft, 6in
+Weight    Example: 145lbs
+Age
+Select your age
+    under 18
+    18 - 34
+    35 - 44
+    50 - 69
+    70+
+
+Lifestyle and goals
+
+Which currently matches your present lifestyle?
+Active
+Moderate
+Sedentary
+
+What are your weight goals?
+Gain
+Lose
+Maintain
+
+Food preferences and restrictions
+
+Do you have any dietary restrictions? (select all that apply)
+Vegetarian
+Gluten-free
+Kosher
+Low salt
+Other, please explain:
+
+Submit
+Reset
+----- END OF FILE CONTENT -----
+
+File: m3\text\meditate.txt
+----- START OF FILE CONTENT -----
+What is Meditation?
+
+Meditation is one path toward transforming the mind. Buddhist meditation practices encourage and develop concentration, clarity, and emotional positivity. When you begin a meditation practice, you may learn the patterns and habits of your mind. Meditation offers you a way to cultivate new and more positive ways to approach the things you do throughout your day. Meditation can have a transformative effect and can lead to positive changes as well as a new understanding of life.
+
+Video of a woman meditating
+
+Choose your meditation music
+----- END OF FILE CONTENT -----
+
+File: m3\text\menus.txt
+----- START OF FILE CONTENT -----
+Home
+Strength Training
+Cardio Exercises
+Stress Relief
+    What is Stress?
+    5 Helpful Tips
+    Meditation
+    Vipassana
+Healthy Diets
+    Why a Healthy Diet?
+    Plan Your Meals
+    Count Your Calories
+    Calculate Your BMI
+
+----- END OF FILE CONTENT -----
+
+File: m3\text\prepare.txt
+----- START OF FILE CONTENT -----
+How to prepare to Shape Up!
+
+Get a check up
+If you have any health issues or take any medications, be sure to consult with your healthcare provider before beginning a new exercise or diet regimen.
+
+Dress for Success
+Workout clothes should be comfy. While exercising, you should be thinking about what you're doing, not what you're wearing. That includes good shoes, which are essential for running, jogging, or walking, and socks that absorb shock and sweat.
+
+Equipment?
+You don't need to buy a lot of fancy equipment to get in shape. But you might want to invest in a yoga mat, a large exercise ball, or some weights, depending on your Shape Up! plan.
+
+Resist Temptation
+It's hard to eat right when everyone else is buying lunch at a fast food restaurant. Invest in some good food containers and bring your healthy lunch and snacks. Your body and your wallet will thank you.
+----- END OF FILE CONTENT -----
+
+File: m3\text\strength.txt
+----- START OF FILE CONTENT -----
+Strength training
+
+Strength training is a type of physical exercise that uses resistance to induce muscular contraction. This builds the strength, anaerobic endurance, and size of skeletal muscles.
+
+Benefits
+
+When properly performed, strength training can provide significant functional benefits and improvement in overall health and well-being. Some of the benefits are:
+
+increased bone, muscle, tendon, and ligament strength and toughness
+improved joint function
+reduced potential for injury
+increased bone density
+increased metabolism
+improved cardiac function
+
+Exercises and sports
+
+Training commonly uses the technique of progressively increasing the force output of the muscle through incremental weight increases. It uses a variety of exercises and types of equipment to target specific muscle groups.
+Some sports where strength training is central are bodybuilding, weightlifting, shotput, discus throw, and javelin throw. Many other sports use strength training as part of their training regimen. These include tennis, American football, wrestling, track and field, rowing, lacrosse, basketball, hockey, wrestling, and soccer.
+
+Additional information
+Want to start a strength training regimen? Send an email to strengthtraining@shapeup.com or call us at 555-555-5555 and we'll send you a our complimentary strength training program.
+----- END OF FILE CONTENT -----
+
+File: m3\text\stress_relief.txt
+----- START OF FILE CONTENT -----
+Stress Relief
+		
+We all encounter stress at one time or another. So it's important to be able to recognize stress and learn how to deal with it.
+
+What is stress?
+
+Stress is the feeling that people have when they are overloaded and struggling to cope with demands. Anything that poses a real or perceived challenge or threat to a person's well-being can cause stress.
+
+Stress can also be a motivator. It can be essential to survival. The &quot;fight-or-flight&quot; mechanism helps us know when and how to respond to danger. But when this mechanism is triggered too easily, or when there are too many stressors at one time, it can become harmful to a person's mental and physical health.
+
+How to manage your stress
+
+To help manage stress, try the following:
+
+Take a break from what you're doing
+Exercise on a regular basis
+Take time to smile and laugh
+Get support from family and friends
+Meditate
+----- END OF FILE CONTENT -----
+
+File: m3\text\stress_tips.txt
+----- START OF FILE CONTENT -----
+Stress relief tips
+
+Here are five tips that can help you relieve stress on a daily basis.
+            
+Take a break from what you're doing
+
+Maybe it's hard to get away from a big work project, a crying baby or a growing credit card bill. But give yourself permission to step away from it for a short time. Don't avoid your stressors (those bills have to be paid sometime), but take a few minutes for yourself.
+            
+Exercise on a regular basis
+
+Exercise is a huge part of being healthy, and it benefits your mind as well as your body. It doesn't have to be an hour a day; even a 20-minute walk in the midst of a stressful time can give you an immediate effect that can last for several hours.
+
+Take time to smile and laugh
+
+When people are stressed, they often hold a lot of the stress in their face. Laughs and smiles can help relieve some of that tension and improve the situation. And if you share your smile with someone else, it will them release some of their tension too!
+
+Get support from family and friends
+
+Call a friend, send an email. Sharing your concerns does help relieve stress. But pick a person who you feel can understand you. If your co-workers are the stressors, it probably won't alleviate your stress if you share your worries over credit card bills with one of them.
+
+Meditate
+
+Meditation helps the mind and body to relax and focus. When meditating, people can release emotions that may have been causing the body physical stress. Research has shown that even meditating briefly can reap immediate benefits.
+----- END OF FILE CONTENT -----
+
+File: m3\text\vipassana.txt
+----- START OF FILE CONTENT -----
+Mindfulness: The practice of vipassana
+
+Vipassana is a quality of mind generally referred to as mindfulness. Mindfulness is a state of open and nonjudgmental attention to the contents of consciousness. Cultivating this quality of mind has been shown to moderate pain, relieve anxiety and depression, improve cognitive function.
+
+It may sound easy to sit quietly and remove your mind of distraction, but when you begin practicing vipassana, you'll find that distraction is the normal condition of the mind. In today�s fast-paced world, it's harder than ever to train the mind to break through these continuous distractions. Meditation is a technique for doing just this. The goal is to enjoy a mind that is undisturbed by worry and to become effortlessly aware of the flow of experience in the present.
+
+There is no time limit on meditation. You can start with a 5-minute meditation session once a month, spend an hour a day meditating, or anything in between. This is your practice, your journey, and you proceed at your pace. Regardless of how long or how often you practice vipassana, you will always receive its benefits.
+
+How to begin practicing vipassana
+
+Sit comfortably, with your spine erect, either in a chair or cross-legged on a cushion.
+Close your eyes, take a few deep breaths, and feel the points of contact between your body and the chair or floor. Notice the sensations associated with sitting, such as feelings of pressure, warmth, tingling, or vibration.
+Gradually become aware of the process of breathing. Pay attention to wherever you feel the breath most clearly�either at the nostrils or in the rising and falling your abdomen.
+Allow your attention to rest in the mere sensation of breathing. Don�t try to control your breath. Just let it come and go naturally.
+Every time your mind wanders in thought, gently return it to the sensation of breathing.
+As you focus on your breathing, you will notice that other perceptions and sensations continue to appear: sounds, feelings in the body, emotions. Notice these phenomena as they come into your field of awareness, and then return to the sensation of breathing.
+The moment you realize that you have been lost in thought, notice the present thought itself as an object of consciousness. Then return your attention to your breathing or to whatever sounds or sensations arise in the next moment.
+Continue in this way until you can simply witness all objects of consciousness�sights, sounds, sensations, emotions, and even thoughts themselves�as they arise and pass away.
+----- END OF FILE CONTENT -----
+
+File: media\ambient_grand_piano.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: media\ambient_grand_piano.mp3]
+----- END OF FILE CONTENT -----
+
+File: media\body_and_soul.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: media\body_and_soul.mp3]
+----- END OF FILE CONTENT -----
+
+File: media\meditation.mp4
+----- START OF FILE CONTENT -----
+[Skipped binary file: media\meditation.mp4]
+----- END OF FILE CONTENT -----
+
+File: media\time_inevitability.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: media\time_inevitability.mp3]
+----- END OF FILE CONTENT -----
+
+File: media\waves_and_tears.mp3
+----- START OF FILE CONTENT -----
+[Skipped binary file: media\waves_and_tears.mp3]
+----- END OF FILE CONTENT -----
+
+File: strength\strength.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Strength Training</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Strength Training</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: stress\meditate.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Meditation</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Meditation</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: stress\stress.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Stress</title>
+</head>
+
+<body>
+    <main>
+        <h1>Stress Relief</h1>
+        <h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: stress\tips.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Stress Relief Tips</title>
+</head>
+
+<body>
+	<main>
+	    <h1>Stress relief tips</h1>
+		<h2>Under Construction</h2>
+	</main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: stress\vipassana.html
+----- START OF FILE CONTENT -----
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Shape Up! | Vipassana</title>
+</head>
+
+<body>
+    <main>
+        <h1>Vipassana</h1>
+        <h2>Under construction</h2>
+    </main>
+</body>
+</html>
+----- END OF FILE CONTENT -----
+
+File: styles\main.css
+----- START OF FILE CONTENT -----
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 1vw;
+}
+
+body {
+  width: 100%;
+  background-color: #f0f0f0;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1rem;
+  color: #000;
+  margin: 0;
+  padding: 0;
+}
+
+.wrapper {
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 2rem;
+}
+
+header {
+  background: linear-gradient(white, lightsteelblue);
+  padding: 1rem;
+  border-bottom: 0.2rem solid steelblue;
+}
+
+header img {
+  max-width: 120px;
+  min-width: 100px;
+  width: 100%;
+  height: auto;
+  float: left;
+  margin-right: 1rem;
+  margin-top: 0.3rem;
+}
+
+header::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+h1 {
+  color: steelblue;
+  font-size: 2rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.subhead {
+  font-size: 1.4rem;
+  font-weight: normal;
+  color: #000;
+  margin-top: 0.2rem;
+  margin-bottom: 0.6rem;
+}
+
+h2 {
+  color: #000;
+  font-size: 1.6rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+h3 {
+  color: maroon;
+  font-size: 1.2rem;
+  margin-top: 1rem;
+  margin-bottom: 0.3rem;
+  font-weight: bold;
+}
+
+p {
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+blockquote {
+  margin: 0 2rem;
+  font-style: italic;
+}
+
+.underline {
+  text-decoration: underline;
+}
+
+main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+main > section {
+  flex: 3;
+  margin-right: 1rem;
+}
+
+main > aside {
+  flex: 1;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 0.2rem solid steelblue;
+  border-radius: 0.5rem;
+  background-color: #fafafa;
+}
+
+a:link,
+a:visited {
+  color: maroon;
+  text-decoration: underline;
+  font-weight: bold;
+}
+a:hover,
+a:focus {
+  color: steelblue;
+}
+
+.blue-links a:link,
+.blue-links a:visited {
+  color: steelblue;
+}
+.blue-links a:hover,
+.blue-links a:focus {
+  color: steelblue;
+  text-decoration: underline;
+}
+
+ul {
+  list-style-type: disc;
+  margin-left: 2rem;
+  margin-bottom: 1rem;
+}
+
+footer {
+  background-color: steelblue;
+  color: #fff;
+  text-align: center;
+  font-size: 0.9rem;
+  padding: 1rem;
+  margin-top: 2rem;
+}
+
+nav {
+  background-color: steelblue;
+  margin-bottom: 1rem;
+}
+
+nav ul {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  flex-wrap: wrap;
+}
+
+nav ul li {
+  position: relative;
+}
+
+nav ul li a {
+  display: block;
+  padding: 0.75rem 1rem;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+nav li.current > a {
+  border: 1px solid #fff;
+  border-radius: 5px;
+}
+
+nav ul li:hover > a {
+  background-color: #4682b4;
+}
+
+nav ul li ul.sub-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: steelblue;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  min-width: 10rem;
+}
+
+nav ul li:hover ul.sub-menu {
+  display: block;
+}
+
+nav ul li ul.sub-menu li a {
+  padding: 0.5rem 1rem;
+  color: #fff;
+}
+
+nav ul li ul.sub-menu li a:hover {
+  background-color: #4682b4;
+}
+
+----- END OF FILE CONTENT -----
+
+File: styles\main_3_column.css
+----- START OF FILE CONTENT -----
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  html {
+    font-size: 1vw;
+  }
+  
+  body {
+    width: 100%;
+    background-color: #f0f0f0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 1rem;
+    color: #000;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .wrapper {
+    margin: 0 auto;
+    background-color: #fff;
+    padding: 2rem;
+  }
+  
+  header {
+    background: linear-gradient(white, lightsteelblue);
+    padding: 1rem;
+    border-bottom: 0.2rem solid steelblue;
+  }
+  
+  header img {
+    max-width: 120px;
+    min-width: 100px;
+    width: 100%;
+    height: auto;
+    float: left;
+    margin-right: 1rem;
+    margin-top: 0.3rem;
+  }
+  
+  header::after {
+    content: "";
+    display: block;
+    clear: both;
+  }
+  
+  h1 {
+    color: steelblue;
+    font-size: 2rem;
+    font-style: italic;
+    margin: 0;
+  }
+  
+  .subhead {
+    font-size: 1.4rem;
+    font-weight: normal;
+    color: #000;
+    margin-top: 0.2rem;
+    margin-bottom: 0.6rem;
+  }
+  
+  h2 {
+    color: #000;
+    font-size: 1.6rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  h3 {
+    color: maroon;
+    font-size: 1.2rem;
+    margin-top: 1rem;
+    margin-bottom: 0.3rem;
+    font-weight: bold;
+  }
+  
+  p {
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  
+  blockquote {
+    margin: 0 2rem;
+    font-style: italic;
+  }
+
+  main {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  main > aside {
+    flex: 1;
+    margin: 1rem;
+    padding: 1rem;
+    border: 0.2rem solid steelblue;
+    border-radius: 0.5rem;
+    background-color: #fafafa;
+  }
+
+  main > section {
+    flex: 2;
+    margin: 1rem;
+  }
+  
+  a:link,
+  a:visited {
+    color: maroon;
+    text-decoration: underline;
+    font-weight: bold;
+  }
+  
+  a:hover,
+  a:focus {
+    color: steelblue;
+  }
+  
+  .blue-links a:link,
+  .blue-links a:visited {
+    color: steelblue;
+  }
+  
+  .blue-links a:hover,
+  .blue-links a:focus {
+    color: steelblue;
+    text-decoration: underline;
+  }
+  
+  ul {
+    list-style-type: disc;
+    margin-left: 2rem;
+    margin-bottom: 1rem;
+  }
+  
+  footer {
+    background-color: steelblue;
+    color: #fff;
+    text-align: center;
+    font-size: 0.9rem;
+    padding: 1rem;
+    margin-top: 2rem;
+  }
+  
+  .underline {
+    text-decoration: underline;
+  }
+  
+----- END OF FILE CONTENT -----
+
+File: text\bmi.txt
+----- START OF FILE CONTENT -----
+What is a Body Mass Index?
+
+Body mass index (BMI) is a measure of a person's body fat based on his or her height and weight. It can be used to determine if you are underweight, normal, overweight, or obese.
+			
+Calculate your Body Mass Index
+        
+Use the form that follows to calculate your BMI:
+
+What do my results mean? Health authorities agree that:
+
+People with a BMI of less than 18.5 are underweight.
+A BMI of between 18.5 and 25 is ideal.
+People with a BMI between 25 and 30 are considered overweight.
+People with a BMI over 30 are considered obese.      
+----- END OF FILE CONTENT -----
+
+File: text\calories.txt
+----- START OF FILE CONTENT -----
+Calorie Counter
+
+Category	Food	Serving size	Calories
+Beef	Frankfurter, Beef	1 each	184
+	Ground Beef	4 oz	264
+	T-Bone Steak	8 ounces	402
+
+Bread	Bagel, plain	1 bagel	360
+	Bread, sliced	1 slice	60 to 80
+	English Muffin	1	135
+
+Cereal	Cheerios	1 cup	110
+	Corn Flakes	1 cup	100
+	Oatmeal, quick	1 cup cooked	145
+
+Cheese	American	1 ounce	106
+	Swiss	1 ounce	100
+	Cheddar	1 ounce	114
+	Cottage Cheese, regular	1/2 cup	117
+
+Fruit	Apple	1 medium	80
+	Banana	1	105
+
+Vegetables	Corn, fresh	1 medium ear	88
+	Carrot, raw	1 medium	25
+	Celery	1 large stalk	9
+
+Miscellaneous	Milk, whole	1 cup	157
+	Eggs	1	70
+	Peanut butter	2 tablespoons	188
+	Pasta	1/2 cup dry	200
+	Rice	1 cup cooked	204
+	Canned tuna, in water	2 ounces	70
+	Baked potato	1 medium	130
+----- END OF FILE CONTENT -----
+
+File: text\diet.txt
+----- START OF FILE CONTENT -----
+Why a healthy diet is important
+
+Although exercise can help you lose body fat and tone muscles, it's also important to have a healthy diet. In the short term, a poor diet can contribute to stress, tiredness, and the capacity to work. Over time, it may add to the risk of developing some illnesses and health problems such as obesity, tooth decay, high blood pressure, high cholesterol, heart disease, some cancers, depression, osteoporosis, and type-2 diabetes. You've probably heard the old saying, "you are what you eat." So, to be in shape, you need to eat right.
+
+What is a healthy diet?
+
+A healthy diet is more than eating a salad for lunch or buying fat-free yogurt. A healthy diet is a balanced diet that gives your body the nutrients it needs to function properly. And that means getting the majority of your daily calories from fresh fruits and vegetables, whole grains, legumes, nuts, and lean proteins.
+
+When should you start?
+
+Right now! No matter how old you are, how you've eaten in the past, whether you exercise daily or almost never, the benefits of a healthy diet begin today... if you start today!
+
+Where can you find healthy food?
+
+Healthy food is available almost everywhere. You just have to plan ahead. Almost all restaurants and grocery stores offer healthy options nowadays. And, although it may be more expensive than unhealthy food, the extra money you spend on buying healthy food will be repaid many times over from a healthy life.
+----- END OF FILE CONTENT -----
+
+File: text\home.txt
+----- START OF FILE CONTENT -----
+Shape Up!
+
+Find the best fit for you
+
+Get ready to Shape Up!
+How many times have you started a new workout routine or diet? And how many times has it failed to give you the results you want? Now, with the help of this site, you can learn about the exercises and diet that work best for you. We offer personalized programs as well as access to several health and dieting tools. So don't wait! Get started looking and feeling better today.
+As fitness expert Amanda Russell said:
+Fitness is about so much more than exercise. It’s a catalyst for positive change, and it affects every aspect of your life.
+
+What we offer
+
+Build strong muscles
+Tired of being tired? Strength training can help you manage or lose weight and increase your metabolism to help you burn more calories. It can also increase bone density and reduce the risk of osteoporosis.
+
+Get your heart rate up
+Want to lose weight? Cardiovascular exercise burns calories and improves overall health. It can reduce belly fat, promote brain growth, prevent stress, and help you focus.
+
+Relax
+Stressed out? Stress can weaken the immune system and cause high blood pressure, fatigue, depression, anxiety, and even heart disease. Learn ways to manage and reduce stress.
+
+Eat what's right for you
+Are you really what you eat? Lose weight, gain weight, or just feel great! Maintaining a healthy diet is probably the most important thing you can do to promote overall health.
+
+Additional resources
+
+Physical activity and health
+https://www.cdc.gov/physical-activity-basics/benefits/index.html
+
+Stretching exercises
+https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching
+
+Strength training
+https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise
+
+Cardiovascular training
+https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart
+
+Yoga workout
+https://www.self.com/gallery/power-yoga-workout
+
+(c) Shape Up!
+----- END OF FILE CONTENT -----
+
+File: text\meals.txt
+----- START OF FILE CONTENT -----
+Meal plan order form
+
+Fill out the form as completely as possible and we will email you a weekly meal plan, customized
+for you--your lifestyle, your goals, and your personal needs.
+
+Asterisks (*) indicate required entries.
+
+Tell us about yourself
+
+Full name
+Email
+    Gender
+    Select a gender
+    Male
+    Female
+    Non-Binary
+Height    Example: 5ft, 6in
+Weight    Example: 145lbs
+Age
+Select your age
+    under 18
+    18 - 34
+    35 - 44
+    50 - 69
+    70+
+
+Lifestyle and goals
+
+Which currently matches your present lifestyle?
+Active
+Moderate
+Sedentary
+
+What are your weight goals?
+Gain
+Lose
+Maintain
+
+Food preferences and restrictions
+
+Do you have any dietary restrictions? (select all that apply)
+Vegetarian
+Gluten-free
+Kosher
+Low salt
+Other, please explain:
+
+Submit
+Reset
+----- END OF FILE CONTENT -----
+
+File: text\meditate.txt
+----- START OF FILE CONTENT -----
+What is Meditation?
+
+Meditation is one path toward transforming the mind. Buddhist meditation practices encourage and develop concentration, clarity, and emotional positivity. When you begin a meditation practice, you may learn the patterns and habits of your mind. Meditation offers you a way to cultivate new and more positive ways to approach the things you do throughout your day. Meditation can have a transformative effect and can lead to positive changes as well as a new understanding of life.
+
+Video of a woman meditating
+
+Choose your meditation music
+----- END OF FILE CONTENT -----
+
+File: text\menus.txt
+----- START OF FILE CONTENT -----
+Home
+Strength Training
+Cardio Exercises
+Stress Relief
+    What is Stress?
+    5 Helpful Tips
+    Meditation
+    Vipassana
+Healthy Diets
+    Why a Healthy Diet?
+    Plan Your Meals
+    Count Your Calories
+    Calculate Your BMI
+
+----- END OF FILE CONTENT -----
+
+File: text\prepare.txt
+----- START OF FILE CONTENT -----
+How to prepare to Shape Up!
+
+Get a check up
+If you have any health issues or take any medications, be sure to consult with your healthcare provider before beginning a new exercise or diet regimen.
+
+Dress for Success
+Workout clothes should be comfy. While exercising, you should be thinking about what you're doing, not what you're wearing. That includes good shoes, which are essential for running, jogging, or walking, and socks that absorb shock and sweat.
+
+Equipment?
+You don't need to buy a lot of fancy equipment to get in shape. But you might want to invest in a yoga mat, a large exercise ball, or some weights, depending on your Shape Up! plan.
+
+Resist Temptation
+It's hard to eat right when everyone else is buying lunch at a fast food restaurant. Invest in some good food containers and bring your healthy lunch and snacks. Your body and your wallet will thank you.
+----- END OF FILE CONTENT -----
+
+File: text\strength.txt
+----- START OF FILE CONTENT -----
+Strength training
+
+Strength training is a type of physical exercise that uses resistance to induce muscular contraction. This builds the strength, anaerobic endurance, and size of skeletal muscles.
+
+Benefits
+
+When properly performed, strength training can provide significant functional benefits and improvement in overall health and well-being. Some of the benefits are:
+
+increased bone, muscle, tendon, and ligament strength and toughness
+improved joint function
+reduced potential for injury
+increased bone density
+increased metabolism
+improved cardiac function
+
+Exercises and sports
+
+Training commonly uses the technique of progressively increasing the force output of the muscle through incremental weight increases. It uses a variety of exercises and types of equipment to target specific muscle groups.
+Some sports where strength training is central are bodybuilding, weightlifting, shotput, discus throw, and javelin throw. Many other sports use strength training as part of their training regimen. These include tennis, American football, wrestling, track and field, rowing, lacrosse, basketball, hockey, wrestling, and soccer.
+
+Additional information
+Want to start a strength training regimen? Send an email to strengthtraining@shapeup.com or call us at 555-555-5555 and we'll send you a our complimentary strength training program.
+----- END OF FILE CONTENT -----
+
+File: text\stress_relief.txt
+----- START OF FILE CONTENT -----
+Stress Relief
+		
+We all encounter stress at one time or another. So it's important to be able to recognize stress and learn how to deal with it.
+
+What is stress?
+
+Stress is the feeling that people have when they are overloaded and struggling to cope with demands. Anything that poses a real or perceived challenge or threat to a person's well-being can cause stress.
+
+Stress can also be a motivator. It can be essential to survival. The &quot;fight-or-flight&quot; mechanism helps us know when and how to respond to danger. But when this mechanism is triggered too easily, or when there are too many stressors at one time, it can become harmful to a person's mental and physical health.
+
+How to manage your stress
+
+To help manage stress, try the following:
+
+Take a break from what you're doing
+Exercise on a regular basis
+Take time to smile and laugh
+Get support from family and friends
+Meditate
+----- END OF FILE CONTENT -----
+
+File: text\stress_tips.txt
+----- START OF FILE CONTENT -----
+Stress relief tips
+
+Here are five tips that can help you relieve stress on a daily basis.
+            
+Take a break from what you're doing
+
+Maybe it's hard to get away from a big work project, a crying baby or a growing credit card bill. But give yourself permission to step away from it for a short time. Don't avoid your stressors (those bills have to be paid sometime), but take a few minutes for yourself.
+            
+Exercise on a regular basis
+
+Exercise is a huge part of being healthy, and it benefits your mind as well as your body. It doesn't have to be an hour a day; even a 20-minute walk in the midst of a stressful time can give you an immediate effect that can last for several hours.
+
+Take time to smile and laugh
+
+When people are stressed, they often hold a lot of the stress in their face. Laughs and smiles can help relieve some of that tension and improve the situation. And if you share your smile with someone else, it will them release some of their tension too!
+
+Get support from family and friends
+
+Call a friend, send an email. Sharing your concerns does help relieve stress. But pick a person who you feel can understand you. If your co-workers are the stressors, it probably won't alleviate your stress if you share your worries over credit card bills with one of them.
+
+Meditate
+
+Meditation helps the mind and body to relax and focus. When meditating, people can release emotions that may have been causing the body physical stress. Research has shown that even meditating briefly can reap immediate benefits.
+----- END OF FILE CONTENT -----
+
+File: text\vipassana.txt
+----- START OF FILE CONTENT -----
+Mindfulness: The practice of vipassana
+
+Vipassana is a quality of mind generally referred to as mindfulness. Mindfulness is a state of open and nonjudgmental attention to the contents of consciousness. Cultivating this quality of mind has been shown to moderate pain, relieve anxiety and depression, improve cognitive function.
+
+It may sound easy to sit quietly and remove your mind of distraction, but when you begin practicing vipassana, you'll find that distraction is the normal condition of the mind. In today�s fast-paced world, it's harder than ever to train the mind to break through these continuous distractions. Meditation is a technique for doing just this. The goal is to enjoy a mind that is undisturbed by worry and to become effortlessly aware of the flow of experience in the present.
+
+There is no time limit on meditation. You can start with a 5-minute meditation session once a month, spend an hour a day meditating, or anything in between. This is your practice, your journey, and you proceed at your pace. Regardless of how long or how often you practice vipassana, you will always receive its benefits.
+
+How to begin practicing vipassana
+
+Sit comfortably, with your spine erect, either in a chair or cross-legged on a cushion.
+Close your eyes, take a few deep breaths, and feel the points of contact between your body and the chair or floor. Notice the sensations associated with sitting, such as feelings of pressure, warmth, tingling, or vibration.
+Gradually become aware of the process of breathing. Pay attention to wherever you feel the breath most clearly�either at the nostrils or in the rising and falling your abdomen.
+Allow your attention to rest in the mere sensation of breathing. Don�t try to control your breath. Just let it come and go naturally.
+Every time your mind wanders in thought, gently return it to the sensation of breathing.
+As you focus on your breathing, you will notice that other perceptions and sensations continue to appear: sounds, feelings in the body, emotions. Notice these phenomena as they come into your field of awareness, and then return to the sensation of breathing.
+The moment you realize that you have been lost in thought, notice the present thought itself as an object of consciousness. Then return your attention to your breathing or to whatever sounds or sensations arise in the next moment.
+Continue in this way until you can simply witness all objects of consciousness�sights, sounds, sensations, emotions, and even thoughts themselves�as they arise and pass away.
+----- END OF FILE CONTENT -----
