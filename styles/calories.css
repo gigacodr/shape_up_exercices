@@ -1,0 +1,117 @@
+main > section > h1 {
+    color: maroon;
+    text-align: center;
+    margin-bottom: 1em;
+    font-size: 1.8em;
+}
+
+.calorie-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5em;
+    border: 2px solid black;
+}
+
+.calorie-table th,
+.calorie-table td {
+    border: 1px solid black;
+    padding: 0.6em 0.75em;
+    text-align: left;
+    vertical-align: top;
+}
+
+.calorie-table th {
+    background-color: steelblue;
+    color: white;
+    font-weight: bold;
+}
+
+.calorie-table td.category-cell {
+    background-color: #2d3e50;
+    color: white;
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.calorie-table tbody tr {
+    background-color: white;
+}
+
+.calorie-table tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+@media (max-width: 767px) {
+    main > section > h1 {
+        font-size: 1.6em;
+    }
+
+    .calorie-table thead {
+        display: none;
+    }
+
+    .calorie-table,
+    .calorie-table tbody,
+    .calorie-table tr,
+    .calorie-table td {
+        display: block;
+        width: 100% !important;
+        box-sizing: border-box;
+    }
+
+    .calorie-table {
+        border: 1px solid #000;
+    }
+
+    .calorie-table tr {
+        background-color: #fff;
+        padding-bottom: 0;
+        margin-bottom: 0;
+        border: none;
+    }
+    
+    .calorie-table tr:not(:last-child) {
+         border-bottom: 1px solid #000;
+    }
+
+
+    .calorie-table td {
+        border: none;
+        padding: 0;
+    }
+
+    .calorie-table td.category-cell {
+        background-color: #365891;
+        color: white;
+        font-weight: bold;
+        padding: 0.8em 1em;
+        text-align: left;
+    }
+
+    .calorie-table td[data-label] {
+        padding: 0.5em 1em;
+        font-size: 0.95em;
+        position: relative;
+    }
+    
+    .calorie-table tr td:not(.category-cell):not(:last-child) {
+        border-bottom: 1px dotted #ccc;
+    }
+
+
+    .calorie-table td[data-label="Food"] {
+        font-weight: bold;
+        font-size: 1.05em;
+        color: #333;
+    }
+
+    .calorie-table td[data-label="Serving size"],
+    .calorie-table td[data-label="Calories"] {
+        color: #555;
+        font-size: 0.9em;
+    }
+    
+    .calorie-table td[data-label="Calories"]::after {
+        content: " calories";
+    }
+}
