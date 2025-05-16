@@ -1,0 +1,28 @@
+
+main section h1 {
+}
+
+main section h3 {
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+}
+
+video {
+    width: 100%;
+    max-width: 700px;
+    height: auto;
+    display: block;
+    margin-bottom: 1.5em;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+audio {
+    width: 100%;
+    display: block;
+    margin-bottom: 1em;
+}
+
+audio:last-of-type {
+    margin-bottom: 0;
+}

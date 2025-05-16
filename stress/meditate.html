@@ -1,15 +1,125 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Shape Up! | Meditation</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shape Up! | Meditation</title>
+  <link rel="stylesheet" href="../styles/main.css" />
+  <link rel="stylesheet" href="../styles/meditation.css" />
 </head>
-
 <body>
-	<main>
-	    <h1>Meditation</h1>
-		<h2>Under Construction</h2>
-	</main>
+  <div class="wrapper">
+
+    <header>
+      <a href="../index.html">
+        <img src="../images/shape_up_logo.png" alt="Shape Up logo" />
+      </a>
+      <h1>Shape Up!</h1>
+      <h2 class="subhead">Find the best fit for you</h2>
+    </header>
+
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" />
+    <label for="nav-toggle" class="nav-icon">
+      <span></span><span></span><span></span>
+    </label>
+
+    <nav>
+      <ul class="main-menu">
+        <li><a href="../index.html">Home</a></li>
+        <li><a href="../strength/strength.html">Strength Training</a></li>
+        <li><a href="../cardio/cardio.html">Cardio Exercises</a></li>
+        <li class="current">
+          <a href="stress.html">Stress Relief</a>
+          <ul class="sub-menu">
+            <li><a href="stress.html">What is Stress?</a></li>
+            <li><a href="tips.html">5 Helpful Tips</a></li>
+            <li class="current"><a href="meditate.html">Meditation</a></li>
+            <li><a href="vipassana.html">Vipassana</a></li>
+          </ul>
+        </li>
+        <li>
+          <a href="../diet/diet.html">Healthy Diets</a>
+          <ul class="sub-menu">
+            <li><a href="../diet/diet.html">Why a Healthy Diet?</a></li>
+            <li><a href="../diet/meals.html">Plan Your Meals</a></li>
+            <li><a href="../diet/calories.html">Count Your Calories</a></li>
+            <li><a href="../diet/bmi.html">Calculate Your BMI</a></li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+
+    <main>
+      <section>
+        <h1>What is Meditation?</h1>
+        <p>
+          Meditation is one path toward transforming the mind. Buddhist meditation
+          practices encourage and develop concentration, clarity, and emotional
+          positivity. When you begin a meditation practice, you may learn the patterns
+          and habits of your mind. Meditation offers you a way to cultivate new and
+          more positive ways to approach the things you do throughout your day.
+          Meditation can have a transformative effect and can lead to positive
+          changes as well as a new understanding of life.
+        </p>
+
+        <h3>Video of a woman meditating</h3>
+        <video controls>
+          <source src="../media/meditation.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+
+        <h3>Choose your meditation music</h3>
+        <audio controls>
+          <source src="../media/ambient_grand_piano.mp3" type="audio/mpeg">
+          Your browser does not support the audio tag.
+        </audio>
+        <audio controls>
+          <source src="../media/body_and_soul.mp3" type="audio/mpeg">
+          Your browser does not support the audio tag.
+        </audio>
+        <audio controls>
+          <source src="../media/time_inevitability.mp3" type="audio/mpeg">
+          Your browser does not support the audio tag.
+        </audio>
+        <audio controls>
+          <source src="../media/waves_and_tears.mp3" type="audio/mpeg">
+          Your browser does not support the audio tag.
+        </audio>
+      </section>
+
+      <aside>
+        <h2>Additional resources</h2>
+        <ul class="blue-links icon-list">
+          <li>
+            <a href="https://www.cdc.gov/physical-activity-basics/benefits/index.html">
+              Physical activity and health
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/flexibility-exercise-stretching">
+              Stretching exercises
+            </a>
+          </li>
+          <li>
+            <a href="https://www.heart.org/en/healthy-living/fitness/fitness-basics/strength-and-resistance-training-exercise">
+              Strength training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.health.harvard.edu/exercise-and-fitness/interval-training-for-a-stronger-heart">
+              Cardiovascular training
+            </a>
+          </li>
+          <li>
+            <a href="https://www.self.com/gallery/power-yoga-workout">
+              Yoga workout
+            </a>
+          </li>
+        </ul>
+      </aside>
+    </main>
+
+    <footer><p>© Shape Up!</p></footer>
+  </div>
 </body>
 </html>
